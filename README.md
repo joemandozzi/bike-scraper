@@ -43,6 +43,19 @@ reason, but worse (login-walled, aggressive bot detection).
 ```bash
 git clone <this repo>
 cd bike-scraper
+python3 setup.py
+```
+
+This walks you through everything interactively: your search keywords,
+zip/radius, target sizes, email address, and SMTP credentials (with a link
+and instructions if you're sending from Gmail). It writes `config.yaml`
+and `.env` for you, offers to create the virtualenv and install
+dependencies, run a test search, and schedule it via `launchd`. Safe to
+re-run any time — it asks before overwriting existing files.
+
+Prefer to do it by hand? Skip `setup.py` and instead:
+
+```bash
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
