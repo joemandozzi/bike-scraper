@@ -5,6 +5,8 @@ Craigslist server-renders a plain-HTML fallback list of search results
 once JS loads, but is present in the raw response body. That's what we parse
 here -- no headless browser needed.
 """
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -26,6 +28,19 @@ def search_craigslist(keyword, zip_code, radius_miles, timeout=15):
         SEARCH_URL, params=params, headers={"User-Agent": USER_AGENT}, timeout=timeout
     )
     resp.raise_for_status()
+
+    # Requesting cat=bia with postal+radius triggers a geo-redirect to a
+    # resolved city URL that keeps postal/radius intact but rewrites the
+    # category to cat=sss (all for sale). Force cat=bia back onto that
+    # resolved URL and refetch so results stay bikes-only.
+    parsed = urlparse(resp.url)
+    query = parse_qs(parsed.query)
+    if query.get("cat") != ["bia"]:
+        query["cat"] = ["bia"]
+        corrected_url = urlunparse(parsed._replace(query=urlencode(query, doseq=True)))
+        resp = requests.get(corrected_url, headers={"User-Agent": USER_AGENT}, timeout=timeout)
+        resp.raise_for_status()
+
     soup = BeautifulSoup(resp.text, "html.parser")
 
     listings = []

@@ -25,15 +25,29 @@ _LETTER_ALIASES = {
     "extra-small": "XS",
     "s": "S",
     "small": "S",
+    "m": "M",
+    "medium": "M",
+    "l": "L",
+    "large": "L",
+    "xl": "XL",
+    "x-large": "XL",
+    "xlarge": "XL",
+    "extra large": "XL",
+    "extra-large": "XL",
 }
 
 # Explicit "NNcm" mention, e.g. "54cm" or "54 cm".
 _CM_RE = re.compile(r"\b(\d{2})\s?cm\b", re.IGNORECASE)
 # "size 52", "size: 52", "sz 52", "size S", "size Small"
 _SIZE_KEYWORD_RE = re.compile(r"\bsiz(?:e|ing)?\s*[:\-]?\s*([A-Za-z0-9-]+)", re.IGNORECASE)
-# Standalone size letters, case-sensitive to cut down on false positives
-# (a lowercase "s" is far more likely to just be an ordinary word).
-_LETTER_RE = re.compile(r"\b(XS|Small|S)\b")
+# Standalone single-letter abbreviations are case-sensitive (uppercase only)
+# to cut down on false positives -- a lowercase "s"/"m"/"l" is far more
+# likely to just be an ordinary word. Spelled-out words (Small, Medium, ...)
+# don't have that ambiguity, so those are matched case-insensitively via the
+# scoped inline flag below.
+_LETTER_RE = re.compile(
+    r"\b(XS|XL|S|M|L|(?i:Extra[- ]?Small|Extra[- ]?Large|X-?Large|Small|Medium|Large))\b"
+)
 
 
 def _normalize(token):
@@ -76,6 +90,15 @@ def extract_size(frame_size_field, text):
             return _normalize(m.group(1))
 
     return None
+
+
+def normalize_config_size(raw):
+    """Normalize a size string from config.yaml the same way detected sizes
+    are normalized, so config casing (e.g. "s" vs "S") doesn't silently fail
+    to match. Falls back to the original token if it isn't a recognized
+    form, rather than dropping it.
+    """
+    return _normalize(raw) or raw
 
 
 def evaluate_size(frame_size_field, text, allowed_sizes):

@@ -13,7 +13,7 @@ import yaml
 from dotenv import load_dotenv
 
 from bikescraper.craigslist import search_craigslist, fetch_listing_detail
-from bikescraper.matcher import evaluate_size, title_matches_keyword
+from bikescraper.matcher import evaluate_size, normalize_config_size, title_matches_keyword
 from bikescraper.storage import filter_unseen, mark_seen
 from bikescraper.notifier import send_digest
 
@@ -57,7 +57,7 @@ def main():
     print(f"=== run started {run_started.isoformat(timespec='seconds')} ===")
 
     config = load_config()
-    allowed_sizes = set(config["sizes"])
+    allowed_sizes = {normalize_config_size(s) for s in config["sizes"]}
     strict_size_filter = config.get("strict_size_filter", False)
 
     print("Searching Craigslist...")
