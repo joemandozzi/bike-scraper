@@ -14,7 +14,13 @@ def send_digest(matches, to_address):
 
     lines = [f"{len(matches)} new bike listing(s) found:\n"]
     for item in matches:
-        size_note = f" | size: {item['detected_size']}" if item.get("detected_size") else " | size: not specified"
+        detected_size = item.get("detected_size")
+        if not detected_size:
+            size_note = " | size: not specified"
+        elif item.get("size_in_target"):
+            size_note = f" | size: {detected_size}"
+        else:
+            size_note = f" | size: {detected_size} (not in your target sizes)"
         price = item["price"] or "no price listed"
         lines.append(f"- {item['title']} ({price}, {item['location']}){size_note}")
         lines.append(f"  {item['url']}")

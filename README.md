@@ -19,10 +19,13 @@ Fork it and fill in your own.
 - For each remaining candidate, it fetches the listing page and reads the
   seller-filled "frame size" field (falling back to scanning the
   description text for a size mention, e.g. "54cm" or "size: S").
-  - If a size is found and it's one of your target sizes, or the size the sellers listed, it's kept.
-  - If a size is found and it's **not** one of your target sizes, it's dropped.
-  - If no size is mentioned anywhere, it's kept anyway (so you can check it
-    yourself) and flagged as "size: not specified" in the email.
+  - By default (`strict_size_filter: false`), every matching listing is
+    shown regardless of size -- the email just labels whether the
+    detected size is one of your targets, isn't, or wasn't specified at
+    all, so you can eyeball it yourself.
+  - Set `strict_size_filter: true` to instead drop listings where a size
+    WAS confidently detected and it's not one of your target sizes.
+    Listings with no size mentioned at all are always shown either way.
 - Listings it's already told you about are remembered (`data/seen.db`) so
   you only get emailed about genuinely new matches.
 
@@ -90,6 +93,8 @@ sizes:
   - "M"
   - "52"
   - "54"
+
+strict_size_filter: false  # true to drop confidently-wrong-size listings
 
 email:
   to: "you@example.com"

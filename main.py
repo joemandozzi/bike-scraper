@@ -12,7 +12,7 @@ import yaml
 from dotenv import load_dotenv
 
 from bikescraper.craigslist import search_craigslist, fetch_listing_detail
-from bikescraper.matcher import size_allowed, title_matches_keyword
+from bikescraper.matcher import evaluate_size, title_matches_keyword
 from bikescraper.storage import filter_unseen, mark_seen
 from bikescraper.notifier import send_digest
 
@@ -54,6 +54,7 @@ def collect_candidates(config):
 def main():
     config = load_config()
     allowed_sizes = set(config["sizes"])
+    strict_size_filter = config.get("strict_size_filter", False)
 
     print("Searching Craigslist...")
     candidates = collect_candidates(config)
@@ -71,12 +72,17 @@ def main():
             detail = {"frame_size": None, "description": ""}
         time.sleep(REQUEST_DELAY_SECONDS)
 
-        keep, detected_size = size_allowed(
+        detected_size, size_in_target = evaluate_size(
             detail["frame_size"], detail["description"], allowed_sizes
         )
         item["detected_size"] = detected_size
-        if keep:
-            matches.append(item)
+        item["size_in_target"] = size_in_target
+
+        # size_in_target is False only when a size WAS found and it's not
+        # one of the target sizes; None means no size could be determined.
+        if strict_size_filter and size_in_target is False:
+            continue
+        matches.append(item)
 
     if matches:
         print(f"{len(matches)} new match(es), sending email...")

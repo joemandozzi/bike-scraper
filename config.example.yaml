@@ -11,14 +11,20 @@ keywords:
   - "Surly Cross-Check"
   - "Rivendell"
 
-# A listing is kept if it mentions one of these sizes, OR if it doesn't
-# mention any size at all (so you can eyeball it yourself). Listings that
-# mention a size NOT in this list are dropped.
+# Sizes you're looking for. By default (strict_size_filter: false) every
+# matching listing is shown regardless of size -- this list is just used
+# to label whether the detected size is one you want, in the email.
 sizes:
   - "S"
   - "M"
   - "52"
   - "54"
+
+# false (default): show every matching listing regardless of size, just
+#   label the detected size in the email so you can eyeball it yourself.
+# true: drop listings where a size WAS found and it's not in the list above
+#   (listings with no size mentioned at all are always shown either way).
+strict_size_filter: false
 
 email:
   to: "you@example.com"

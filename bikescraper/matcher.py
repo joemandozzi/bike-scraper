@@ -1,12 +1,8 @@
-"""Frame-size extraction and filtering.
+"""Frame-size extraction.
 
-A listing is kept if:
-  - no size is mentioned anywhere (structured field or text) -- we can't
-    tell, so we show it and let the human decide, or
-  - a size IS mentioned and it's one of the sizes we're looking for.
-
-A listing is dropped only when a size is confidently detected and it's
-NOT one of the target sizes.
+Every listing that matches a keyword is shown -- size is informational,
+not a filter, by default (see `strict_size_filter` in config.yaml if you
+want non-matching sizes dropped instead of just labeled).
 """
 import re
 
@@ -82,9 +78,13 @@ def extract_size(frame_size_field, text):
     return None
 
 
-def size_allowed(frame_size_field, text, allowed_sizes):
-    """Return (keep: bool, detected_size: str | None)."""
+def evaluate_size(frame_size_field, text, allowed_sizes):
+    """Return (detected_size: str | None, in_target: bool | None).
+
+    in_target is None when no size could be determined at all (so callers
+    can distinguish "unknown" from "known and out of range").
+    """
     detected = extract_size(frame_size_field, text)
     if detected is None:
-        return True, None
-    return (detected in allowed_sizes), detected
+        return None, None
+    return detected, (detected in allowed_sizes)
