@@ -83,6 +83,13 @@ This installs a `launchd` agent that runs every 4 hours (edit
 `StartInterval` in `launchd/com.bikescraper.plist.template` and re-run the
 script to change that). Logs go to `data/scraper.log`.
 
+**Your computer needs to be on and awake for this to work.** `launchd`
+only runs while macOS is running — if your laptop is asleep (lid closed)
+or shut down, scheduled checks are skipped. It'll catch up on the next
+check once you wake it back up, but it won't check in real-time while
+it's closed. Terminal doesn't need to be open and you don't need to be
+logged in — the machine just needs to be powered on and awake.
+
 To uninstall:
 
 ```bash

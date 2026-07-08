@@ -142,6 +142,11 @@ def main():
     if venv_python and ask_yes_no("\nRun a test search right now?", default=True):
         subprocess.run([str(venv_python), str(ROOT / "main.py")])
 
+    print(
+        "\nNote: this runs on YOUR computer, not in the cloud. Your Mac needs to be\n"
+        "on and awake for it to check and send emails -- if it's asleep or shut\n"
+        "down, checks are skipped until you wake it back up."
+    )
     if venv_python and ask_yes_no(
         "\nSchedule it to run automatically every few hours (macOS launchd)?", default=True
     ):
