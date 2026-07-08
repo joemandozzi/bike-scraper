@@ -1,0 +1,24 @@
+# Copy this file to config.yaml and fill in your own search criteria.
+# config.yaml is gitignored so your search terms stay local.
+
+location:
+  zip: "94103"
+  radius_miles: 50
+
+# Each entry is searched independently against Craigslist. Keep them
+# specific (make/model) to cut down on noise.
+keywords:
+  - "Surly Cross-Check"
+  - "Rivendell"
+
+# A listing is kept if it mentions one of these sizes, OR if it doesn't
+# mention any size at all (so you can eyeball it yourself). Listings that
+# mention a size NOT in this list are dropped.
+sizes:
+  - "S"
+  - "M"
+  - "52"
+  - "54"
+
+email:
+  to: "you@example.com"
