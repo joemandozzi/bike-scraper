@@ -6,6 +6,7 @@ Run manually with `python3 main.py`, or schedule it (see README.md).
 """
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -52,6 +53,9 @@ def collect_candidates(config):
 
 
 def main():
+    run_started = datetime.now()
+    print(f"=== run started {run_started.isoformat(timespec='seconds')} ===")
+
     config = load_config()
     allowed_sizes = set(config["sizes"])
     strict_size_filter = config.get("strict_size_filter", False)
@@ -94,6 +98,7 @@ def main():
     # (or decided they don't warrant notifying) -- if send_digest raises,
     # we want to retry these same candidates next run rather than lose them.
     mark_seen(unseen)
+    print(f"=== run finished {datetime.now().isoformat(timespec='seconds')} ===")
 
 
 if __name__ == "__main__":
