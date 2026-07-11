@@ -34,5 +34,14 @@ strict_size_filter: false
 offerup:
   enabled: false
 
+# Also search Facebook Marketplace. Off by default. Runs logged-out (no
+# Facebook account used), so location comes from whatever city Facebook's
+# IP geolocation resolves to on the machine running this -- not
+# necessarily your exact zip above. Works well run on your own home
+# computer, since your home IP generally resolves near where you actually
+# live. Needs the same Playwright + Chromium setup as offerup.
+facebook:
+  enabled: false
+
 email:
   to: "you@example.com"

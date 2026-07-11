@@ -48,14 +48,19 @@ def yaml_str(value):
 
 
 def write_config():
-    """Returns whether OfferUp search is enabled, so the caller knows
-    whether to install its extra dependencies.
+    """Returns the set of optional browser-based sources enabled (a
+    subset of {"offerup", "facebook"}), so the caller knows whether to
+    install their extra dependencies.
     """
     config_path = ROOT / "config.yaml"
     if config_path.exists() and not ask_yes_no(f"\n{config_path.name} already exists. Overwrite?", default=False):
         print("Keeping existing config.yaml.")
         existing = config_path.read_text()
-        return bool(re.search(r"offerup:\s*\n\s*enabled:\s*true", existing))
+        return {
+            name
+            for name in ("offerup", "facebook")
+            if re.search(rf"{name}:\s*\n\s*enabled:\s*true", existing)
+        }
 
     print("\n--- Location ---")
     zip_code = ask("Zip code to search near")
@@ -84,6 +89,15 @@ def write_config():
         default=False,
     )
 
+    print("\n--- Facebook Marketplace (optional) ---")
+    facebook_enabled = ask_yes_no(
+        "Also search Facebook Marketplace? Runs logged-out (no Facebook\n"
+        "account used), so location comes from wherever this machine's IP\n"
+        "resolves to rather than your exact zip -- works well on your own\n"
+        "home computer. Same headless-browser overhead as OfferUp",
+        default=False,
+    )
+
     print("\n--- Notifications ---")
     email_to = ask("Email address to send match digests to")
 
@@ -99,13 +113,22 @@ def write_config():
     lines.append("offerup:")
     lines.append(f"  enabled: {'true' if offerup_enabled else 'false'}")
     lines.append("")
+    lines.append("facebook:")
+    lines.append(f"  enabled: {'true' if facebook_enabled else 'false'}")
+    lines.append("")
     lines.append("email:")
     lines.append(f"  to: {yaml_str(email_to)}")
     lines.append("")
 
     config_path.write_text("\n".join(lines))
     print(f"Wrote {config_path}")
-    return offerup_enabled
+
+    enabled_sources = set()
+    if offerup_enabled:
+        enabled_sources.add("offerup")
+    if facebook_enabled:
+        enabled_sources.add("facebook")
+    return enabled_sources
 
 
 def write_env():
@@ -136,7 +159,7 @@ def write_env():
     print(f"Wrote {env_path}")
 
 
-def setup_venv(offerup_enabled):
+def setup_venv(enabled_sources):
     venv_python = ROOT / ".venv" / "bin" / "python3"
     if venv_python.exists():
         print("\nVirtualenv already exists, skipping creation.")
@@ -148,12 +171,13 @@ def setup_venv(offerup_enabled):
         )
         print("Installed.")
 
-    if offerup_enabled and venv_python.exists():
-        print("\nOfferUp support needs Playwright + a Chromium download (~100-200MB)...")
-        subprocess.run(
-            [str(venv_python), "-m", "pip", "install", "-q", "-r", str(ROOT / "requirements-offerup.txt")],
-            check=True,
-        )
+    if enabled_sources and venv_python.exists():
+        print("\nOfferUp/Facebook support needs Playwright + a Chromium download (~100-200MB)...")
+        for source in enabled_sources:
+            subprocess.run(
+                [str(venv_python), "-m", "pip", "install", "-q", "-r", str(ROOT / f"requirements-{source}.txt")],
+                check=True,
+            )
         subprocess.run([str(venv_python), "-m", "playwright", "install", "chromium"], check=True)
         print("Installed.")
 
@@ -162,9 +186,9 @@ def setup_venv(offerup_enabled):
 
 def main():
     print("bike-scraper setup\n" + "=" * 18)
-    offerup_enabled = write_config()
+    enabled_sources = write_config()
     write_env()
-    venv_python = setup_venv(offerup_enabled)
+    venv_python = setup_venv(enabled_sources)
 
     if venv_python and ask_yes_no("\nRun a test search right now?", default=True):
         subprocess.run([str(venv_python), str(ROOT / "main.py")])

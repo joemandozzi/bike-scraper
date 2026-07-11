@@ -39,8 +39,20 @@ break there can't take down the Craigslist side. Trade-offs: heavier
 50mi max radius regardless of your configured `radius_miles`, and more
 likely to break if OfferUp changes their site's internal data contract.
 
-Facebook Marketplace was skipped entirely (login-walled, aggressive bot
-detection — worse than OfferUp on both counts).
+**Facebook Marketplace is also optional (`facebook.enabled`, off by
+default).** Its logged-out category-browse view reliably resolves an
+IP-based location and accepts a keyword query + radius as plain URL
+params, so unlike OfferUp this one needs no geolocation trickery -- but
+it also means no zip-based location control: it uses whatever city
+Facebook's IP geolocation resolves to on the machine actually running
+this, not your configured zip. That works out fine run on your own home
+computer (your home IP generally resolves near where you actually live),
+less so anywhere else. Deliberately does NOT use a logged-in session --
+that would allow precise location control, but means persisting your
+real Facebook cookies on disk indefinitely, a meaningfully bigger risk
+(ToS violation with your real account, possible flagging) than accepted
+elsewhere in this project. Isolated in its own module
+(`bikescraper/facebook.py`) for the same reason as OfferUp.
 
 ## Setup
 
@@ -71,11 +83,14 @@ For Gmail: enable 2-Step Verification on the account, then create an App
 Password at https://myaccount.google.com/apppasswords and use that (not
 your normal password) as `SMTP_PASS` in `.env`.
 
-To also enable OfferUp, set `offerup.enabled: true` in `config.yaml` and
-install its extra dependency:
+To also enable OfferUp and/or Facebook Marketplace, set `offerup.enabled:
+true` and/or `facebook.enabled: true` in `config.yaml`, then install
+whichever extra dependency file(s) you need (both just install
+Playwright, so it's fine to run either or both):
 
 ```bash
-.venv/bin/pip install -r requirements-offerup.txt
+.venv/bin/pip install -r requirements-offerup.txt    # for OfferUp
+.venv/bin/pip install -r requirements-facebook.txt   # for Facebook Marketplace
 .venv/bin/playwright install chromium
 ```
 
@@ -130,6 +145,9 @@ strict_size_filter: false  # true to drop confidently-wrong-size listings
 
 offerup:
   enabled: false  # true to also search OfferUp (see requirements-offerup.txt)
+
+facebook:
+  enabled: false  # true to also search Facebook Marketplace (see requirements-facebook.txt)
 
 email:
   to: "you@example.com"

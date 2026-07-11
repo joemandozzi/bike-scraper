@@ -6,7 +6,7 @@ Run manually with `python3 main.py`, or schedule it (see README.md).
 """
 import sys
 import time
-from contextlib import nullcontext
+from contextlib import ExitStack
 from datetime import datetime
 from pathlib import Path
 
@@ -20,6 +20,7 @@ from bikescraper.notifier import send_digest
 
 ROOT = Path(__file__).resolve().parent
 REQUEST_DELAY_SECONDS = 1.5
+SOURCE_DISPLAY_NAMES = {"craigslist": "Craigslist", "offerup": "OfferUp", "facebook": "Facebook"}
 
 
 def load_config():
@@ -33,42 +34,56 @@ def load_config():
         return yaml.safe_load(f)
 
 
-def collect_candidates(config, offerup_session):
+def collect_candidates(config, sessions):
+    """`sessions` maps source name -> session object, one entry per
+    optional source that's enabled (e.g. {"offerup": ..., "facebook":
+    ...}). Craigslist always runs and isn't session-based.
+    """
     zip_code = config["location"]["zip"]
     radius = config["location"]["radius_miles"]
 
     by_id = {}
     for keyword in config["keywords"]:
+        counts = {}
+
         try:
             results = search_craigslist(keyword, zip_code, radius)
         except Exception as exc:
             print(f"  [warn] craigslist search failed for {keyword!r}: {exc}", file=sys.stderr)
             results = []
         results = [r for r in results if title_matches_keyword(r["title"], keyword)]
+        counts["craigslist"] = len(results)
+        all_results = list(results)
 
-        offerup_results = []
-        if offerup_session:
+        for source_name, session in sessions.items():
             try:
-                offerup_results = offerup_session.search(keyword, radius)
+                source_results = session.search(keyword, radius)
             except Exception as exc:
-                print(f"  [warn] offerup search failed for {keyword!r}: {exc}", file=sys.stderr)
-                offerup_results = []
-            offerup_results = [r for r in offerup_results if title_matches_keyword(r["title"], keyword)]
+                print(f"  [warn] {source_name} search failed for {keyword!r}: {exc}", file=sys.stderr)
+                source_results = []
+            source_results = [r for r in source_results if title_matches_keyword(r["title"], keyword)]
+            counts[source_name] = len(source_results)
+            all_results += source_results
 
-        total = len(results) + len(offerup_results)
-        breakdown = f" ({len(results)} craigslist, {len(offerup_results)} offerup)" if offerup_session else ""
+        total = sum(counts.values())
+        breakdown = (
+            " (" + ", ".join(f"{n} {SOURCE_DISPLAY_NAMES[src]}" for src, n in counts.items()) + ")"
+            if sessions
+            else ""
+        )
         print(f"  {keyword!r}: {total} candidate(s){breakdown}")
 
-        for item in results + offerup_results:
+        for item in all_results:
             by_id.setdefault(item["id"], item)
         time.sleep(REQUEST_DELAY_SECONDS)
 
     return list(by_id.values())
 
 
-def fetch_detail(item, offerup_session):
-    if item["source"] == "offerup":
-        return offerup_session.fetch_listing_detail(item["url"])
+def fetch_detail(item, sessions):
+    session = sessions.get(item["source"])
+    if session:
+        return session.fetch_listing_detail(item["url"])
     return fetch_listing_detail(item["url"])
 
 
@@ -79,17 +94,32 @@ def main():
     config = load_config()
     allowed_sizes = {normalize_config_size(s) for s in config["sizes"]}
     strict_size_filter = config.get("strict_size_filter", False)
+
     offerup_enabled = config.get("offerup", {}).get("enabled", False)
+    facebook_enabled = config.get("facebook", {}).get("enabled", False)
 
-    offerup_cm = nullcontext(None)
-    if offerup_enabled:
-        from bikescraper.offerup import OfferUpSession
+    with ExitStack() as stack:
+        sessions = {}
+        if offerup_enabled or facebook_enabled:
+            # Playwright's sync API only supports one active driver per
+            # thread, so OfferUp and Facebook (both Playwright-based) share
+            # a single instance rather than each starting their own.
+            from playwright.sync_api import sync_playwright
 
-        offerup_cm = OfferUpSession(config["location"]["zip"])
+            playwright = stack.enter_context(sync_playwright())
 
-    with offerup_cm as offerup_session:
-        print("Searching Craigslist" + (" and OfferUp..." if offerup_session else "..."))
-        candidates = collect_candidates(config, offerup_session)
+            if offerup_enabled:
+                from bikescraper.offerup import OfferUpSession
+
+                sessions["offerup"] = stack.enter_context(OfferUpSession(playwright, config["location"]["zip"]))
+            if facebook_enabled:
+                from bikescraper.facebook import FacebookSession
+
+                sessions["facebook"] = stack.enter_context(FacebookSession(playwright))
+
+        sources = ["Craigslist"] + [SOURCE_DISPLAY_NAMES[s] for s in sessions]
+        print("Searching " + ", ".join(sources) + "...")
+        candidates = collect_candidates(config, sessions)
         print(f"{len(candidates)} unique candidate(s) across all keywords")
 
         unseen = filter_unseen(candidates)
@@ -98,7 +128,7 @@ def main():
         matches = []
         for item in unseen:
             try:
-                detail = fetch_detail(item, offerup_session)
+                detail = fetch_detail(item, sessions)
             except Exception as exc:
                 print(f"  [warn] failed to fetch detail for {item['url']}: {exc}", file=sys.stderr)
                 detail = {"frame_size": None, "description": ""}

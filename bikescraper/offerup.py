@@ -21,7 +21,6 @@ import re
 from urllib.parse import urlencode
 
 import requests
-from playwright.sync_api import sync_playwright
 
 MAX_RADIUS_MILES = 50  # OfferUp's own UI caps distance at 50 miles, full stop
 GEOCODE_UA = "bike-scraper (personal use; github.com/joemandozzi/bike-scraper)"
@@ -64,16 +63,19 @@ class OfferUpSession:
     every keyword search and detail fetch.
     """
 
-    def __init__(self, zip_code, timeout=30):
+    def __init__(self, playwright, zip_code, timeout=30):
+        # Takes an already-started Playwright driver rather than starting
+        # its own: the sync API only supports one active driver per
+        # thread, and OfferUpSession/FacebookSession may both be in use
+        # in the same run.
+        self._playwright = playwright
         self.zip_code = zip_code
         self.timeout_ms = timeout * 1000
-        self._playwright = None
         self._browser = None
         self._context = None
 
     def __enter__(self):
         lat, lon = _geocode_zip(self.zip_code)
-        self._playwright = sync_playwright().start()
         self._browser = self._playwright.chromium.launch(headless=True)
         self._context = self._browser.new_context(
             geolocation={"latitude": lat, "longitude": lon},
@@ -85,7 +87,6 @@ class OfferUpSession:
 
     def __exit__(self, *exc_info):
         self._browser.close()
-        self._playwright.stop()
 
     def _load(self, url):
         # The data we need (__NEXT_DATA__) is server-rendered and present
