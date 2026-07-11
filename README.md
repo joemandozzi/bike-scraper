@@ -29,14 +29,18 @@ Fork it and fill in your own.
 - Listings it's already told you about are remembered (`data/seen.db`) so
   you only get emailed about genuinely new matches.
 
-**Craigslist only for now.** OfferUp's search requires a resolved location
-that isn't set via a simple URL parameter for a plain HTTP request (it
-falls back to IP-based geolocation), and its API returns 403 without app
-authentication. Supporting it would mean running a real headless browser
-(Playwright) to drive their site through the UI — heavier infrastructure
-than the current script, and a good candidate for a future addition rather
-than day one. Facebook Marketplace was skipped entirely for the same
-reason, but worse (login-walled, aggressive bot detection).
+**OfferUp is optional (`offerup.enabled` in config.yaml, off by default).**
+It requires a resolved location that a plain HTTP request can't set (it
+falls back to IP-based geolocation), so this drives a real headless
+browser (Playwright) with an emulated GPS location for your zip code
+instead. It's isolated in its own module (`bikescraper/offerup.py`) so a
+break there can't take down the Craigslist side. Trade-offs: heavier
+(needs a ~100-200MB Chromium download), slower, capped at OfferUp's own
+50mi max radius regardless of your configured `radius_miles`, and more
+likely to break if OfferUp changes their site's internal data contract.
+
+Facebook Marketplace was skipped entirely (login-walled, aggressive bot
+detection — worse than OfferUp on both counts).
 
 ## Setup
 
@@ -66,6 +70,14 @@ cp .env.example .env                 # fill in SMTP credentials
 For Gmail: enable 2-Step Verification on the account, then create an App
 Password at https://myaccount.google.com/apppasswords and use that (not
 your normal password) as `SMTP_PASS` in `.env`.
+
+To also enable OfferUp, set `offerup.enabled: true` in `config.yaml` and
+install its extra dependency:
+
+```bash
+.venv/bin/pip install -r requirements-offerup.txt
+.venv/bin/playwright install chromium
+```
 
 ### Run it once, manually
 
@@ -115,6 +127,9 @@ sizes:
   - "54"
 
 strict_size_filter: false  # true to drop confidently-wrong-size listings
+
+offerup:
+  enabled: false  # true to also search OfferUp (see requirements-offerup.txt)
 
 email:
   to: "you@example.com"

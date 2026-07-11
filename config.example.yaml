@@ -26,5 +26,13 @@ sizes:
 #   (listings with no size mentioned at all are always shown either way).
 strict_size_filter: false
 
+# Also search OfferUp, in addition to Craigslist. Off by default: it
+# requires Playwright + Chromium (one-time setup, see README), is
+# heavier/slower, capped at OfferUp's own 50mi max radius regardless of
+# radius_miles above, and more likely to break if OfferUp changes their
+# site than the Craigslist side is.
+offerup:
+  enabled: false
+
 email:
   to: "you@example.com"

@@ -10,6 +10,7 @@ Only uses the standard library, so it can run before any dependencies
 """
 import getpass
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -47,10 +48,14 @@ def yaml_str(value):
 
 
 def write_config():
+    """Returns whether OfferUp search is enabled, so the caller knows
+    whether to install its extra dependencies.
+    """
     config_path = ROOT / "config.yaml"
     if config_path.exists() and not ask_yes_no(f"\n{config_path.name} already exists. Overwrite?", default=False):
         print("Keeping existing config.yaml.")
-        return
+        existing = config_path.read_text()
+        return bool(re.search(r"offerup:\s*\n\s*enabled:\s*true", existing))
 
     print("\n--- Location ---")
     zip_code = ask("Zip code to search near")
@@ -71,6 +76,14 @@ def write_config():
         default=False,
     )
 
+    print("\n--- OfferUp (optional) ---")
+    offerup_enabled = ask_yes_no(
+        "Also search OfferUp, not just Craigslist? Heavier/slower (needs a\n"
+        "headless browser) and capped at OfferUp's own 50mi max radius, but\n"
+        "covers listings Craigslist doesn't have",
+        default=False,
+    )
+
     print("\n--- Notifications ---")
     email_to = ask("Email address to send match digests to")
 
@@ -83,12 +96,16 @@ def write_config():
     lines.append("")
     lines.append(f"strict_size_filter: {'true' if strict else 'false'}")
     lines.append("")
+    lines.append("offerup:")
+    lines.append(f"  enabled: {'true' if offerup_enabled else 'false'}")
+    lines.append("")
     lines.append("email:")
     lines.append(f"  to: {yaml_str(email_to)}")
     lines.append("")
 
     config_path.write_text("\n".join(lines))
     print(f"Wrote {config_path}")
+    return offerup_enabled
 
 
 def write_env():
@@ -119,7 +136,7 @@ def write_env():
     print(f"Wrote {env_path}")
 
 
-def setup_venv():
+def setup_venv(offerup_enabled):
     venv_python = ROOT / ".venv" / "bin" / "python3"
     if venv_python.exists():
         print("\nVirtualenv already exists, skipping creation.")
@@ -130,14 +147,24 @@ def setup_venv():
             check=True,
         )
         print("Installed.")
+
+    if offerup_enabled and venv_python.exists():
+        print("\nOfferUp support needs Playwright + a Chromium download (~100-200MB)...")
+        subprocess.run(
+            [str(venv_python), "-m", "pip", "install", "-q", "-r", str(ROOT / "requirements-offerup.txt")],
+            check=True,
+        )
+        subprocess.run([str(venv_python), "-m", "playwright", "install", "chromium"], check=True)
+        print("Installed.")
+
     return venv_python if venv_python.exists() else None
 
 
 def main():
     print("bike-scraper setup\n" + "=" * 18)
-    write_config()
+    offerup_enabled = write_config()
     write_env()
-    venv_python = setup_venv()
+    venv_python = setup_venv(offerup_enabled)
 
     if venv_python and ask_yes_no("\nRun a test search right now?", default=True):
         subprocess.run([str(venv_python), str(ROOT / "main.py")])

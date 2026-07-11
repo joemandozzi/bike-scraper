@@ -6,6 +6,7 @@ Run manually with `python3 main.py`, or schedule it (see README.md).
 """
 import sys
 import time
+from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
 
@@ -32,7 +33,7 @@ def load_config():
         return yaml.safe_load(f)
 
 
-def collect_candidates(config):
+def collect_candidates(config, offerup_session):
     zip_code = config["location"]["zip"]
     radius = config["location"]["radius_miles"]
 
@@ -41,15 +42,34 @@ def collect_candidates(config):
         try:
             results = search_craigslist(keyword, zip_code, radius)
         except Exception as exc:
-            print(f"  [warn] search failed for {keyword!r}: {exc}", file=sys.stderr)
+            print(f"  [warn] craigslist search failed for {keyword!r}: {exc}", file=sys.stderr)
             results = []
         results = [r for r in results if title_matches_keyword(r["title"], keyword)]
-        print(f"  {keyword!r}: {len(results)} candidate(s)")
-        for item in results:
+
+        offerup_results = []
+        if offerup_session:
+            try:
+                offerup_results = offerup_session.search(keyword, radius)
+            except Exception as exc:
+                print(f"  [warn] offerup search failed for {keyword!r}: {exc}", file=sys.stderr)
+                offerup_results = []
+            offerup_results = [r for r in offerup_results if title_matches_keyword(r["title"], keyword)]
+
+        total = len(results) + len(offerup_results)
+        breakdown = f" ({len(results)} craigslist, {len(offerup_results)} offerup)" if offerup_session else ""
+        print(f"  {keyword!r}: {total} candidate(s){breakdown}")
+
+        for item in results + offerup_results:
             by_id.setdefault(item["id"], item)
         time.sleep(REQUEST_DELAY_SECONDS)
 
     return list(by_id.values())
+
+
+def fetch_detail(item, offerup_session):
+    if item["source"] == "offerup":
+        return offerup_session.fetch_listing_detail(item["url"])
+    return fetch_listing_detail(item["url"])
 
 
 def main():
@@ -59,34 +79,42 @@ def main():
     config = load_config()
     allowed_sizes = {normalize_config_size(s) for s in config["sizes"]}
     strict_size_filter = config.get("strict_size_filter", False)
+    offerup_enabled = config.get("offerup", {}).get("enabled", False)
 
-    print("Searching Craigslist...")
-    candidates = collect_candidates(config)
-    print(f"{len(candidates)} unique candidate(s) across all keywords")
+    offerup_cm = nullcontext(None)
+    if offerup_enabled:
+        from bikescraper.offerup import OfferUpSession
 
-    unseen = filter_unseen(candidates)
-    print(f"{len(unseen)} not previously seen")
+        offerup_cm = OfferUpSession(config["location"]["zip"])
 
-    matches = []
-    for item in unseen:
-        try:
-            detail = fetch_listing_detail(item["url"])
-        except Exception as exc:
-            print(f"  [warn] failed to fetch detail for {item['url']}: {exc}", file=sys.stderr)
-            detail = {"frame_size": None, "description": ""}
-        time.sleep(REQUEST_DELAY_SECONDS)
+    with offerup_cm as offerup_session:
+        print("Searching Craigslist" + (" and OfferUp..." if offerup_session else "..."))
+        candidates = collect_candidates(config, offerup_session)
+        print(f"{len(candidates)} unique candidate(s) across all keywords")
 
-        detected_size, size_in_target = evaluate_size(
-            detail["frame_size"], detail["description"], allowed_sizes
-        )
-        item["detected_size"] = detected_size
-        item["size_in_target"] = size_in_target
+        unseen = filter_unseen(candidates)
+        print(f"{len(unseen)} not previously seen")
 
-        # size_in_target is False only when a size WAS found and it's not
-        # one of the target sizes; None means no size could be determined.
-        if strict_size_filter and size_in_target is False:
-            continue
-        matches.append(item)
+        matches = []
+        for item in unseen:
+            try:
+                detail = fetch_detail(item, offerup_session)
+            except Exception as exc:
+                print(f"  [warn] failed to fetch detail for {item['url']}: {exc}", file=sys.stderr)
+                detail = {"frame_size": None, "description": ""}
+            time.sleep(REQUEST_DELAY_SECONDS)
+
+            detected_size, size_in_target = evaluate_size(
+                detail["frame_size"], detail["description"], allowed_sizes
+            )
+            item["detected_size"] = detected_size
+            item["size_in_target"] = size_in_target
+
+            # size_in_target is False only when a size WAS found and it's not
+            # one of the target sizes; None means no size could be determined.
+            if strict_size_filter and size_in_target is False:
+                continue
+            matches.append(item)
 
     if matches:
         print(f"{len(matches)} new match(es), sending email...")
