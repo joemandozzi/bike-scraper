@@ -40,19 +40,27 @@ break there can't take down the Craigslist side. Trade-offs: heavier
 likely to break if OfferUp changes their site's internal data contract.
 
 **Facebook Marketplace is also optional (`facebook.enabled`, off by
-default).** Its logged-out category-browse view reliably resolves an
-IP-based location and accepts a keyword query + radius as plain URL
-params, so unlike OfferUp this one needs no geolocation trickery -- but
-it also means no zip-based location control: it uses whatever city
-Facebook's IP geolocation resolves to on the machine actually running
-this, not your configured zip. That works out fine run on your own home
-computer (your home IP generally resolves near where you actually live),
-less so anywhere else. Deliberately does NOT use a logged-in session --
-that would allow precise location control, but means persisting your
-real Facebook cookies on disk indefinitely, a meaningfully bigger risk
-(ToS violation with your real account, possible flagging) than accepted
-elsewhere in this project. Isolated in its own module
-(`bikescraper/facebook.py`) for the same reason as OfferUp.
+default).** Its logged-out category-browse view accepts a keyword query +
+radius as plain URL params, but the location it resolves to is IP-based
+and turned out to be unreliable in testing -- correct sometimes, hundreds
+of miles off other times, on the same home network. Facebook's location
+picker requires being logged in to use, so this needs a one-time
+interactive login (`python3 facebook_login.py`, opens a real visible
+browser for you to log in yourself, handling any 2FA) which saves a
+session to `data/fb_session.json` for the scheduled job to reuse
+headlessly. Falls back to anonymous (less reliable) access if that file
+doesn't exist.
+
+That session file is effectively a login credential for that Facebook
+account, stored in plaintext on this machine (gitignored, never
+committed, never sent anywhere). Anyone with access to this machine's
+filesystem could use it to act as that Facebook account without a
+password or 2FA -- same risk tier as someone stealing a saved login
+cookie from your regular browser profile. Consider using a secondary
+account rather than your primary one if that's a concern. Re-run
+`facebook_login.py` any time the session expires. Isolated in its own
+module (`bikescraper/facebook.py`) so a break there can't take down the
+Craigslist side.
 
 ## Setup
 
@@ -92,6 +100,13 @@ Playwright, so it's fine to run either or both):
 .venv/bin/pip install -r requirements-offerup.txt    # for OfferUp
 .venv/bin/pip install -r requirements-facebook.txt   # for Facebook Marketplace
 .venv/bin/playwright install chromium
+```
+
+For Facebook Marketplace specifically, also log in once (see the risk note
+above first):
+
+```bash
+.venv/bin/python3 facebook_login.py
 ```
 
 ### Run it once, manually

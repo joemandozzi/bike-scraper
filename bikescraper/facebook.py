@@ -1,20 +1,22 @@
 """Facebook Marketplace search scraper.
 
-Unlike OfferUp, Facebook Marketplace's logged-out "category" view (as
-opposed to its /marketplace/search/ endpoint, which ignores geolocation
-overrides for logged-out visitors) reliably resolves an IP-based default
-city and lets you layer a keyword query + radius on top of it via plain
-URL params -- no login, no geolocation emulation needed:
+Facebook Marketplace's logged-out "category" view resolves an IP-based
+default city and lets you layer a keyword query + radius on top of it via
+plain URL params:
 
     https://www.facebook.com/marketplace/category/bicycles?query=<kw>&radius=<mi>
 
-This intentionally does NOT use a logged-in session. That would give
-precise zip-based location control, but it means running Playwright with
-your real Facebook cookies persisted on disk indefinitely -- a much
-bigger risk (ToS violation with your real account, account flagging) than
-the trade-offs already accepted for OfferUp. Logged-out access instead
-gets whatever city Facebook's IP geolocation resolves to, which won't
-always match your configured zip exactly.
+That IP-based location turned out to be unreliable in practice -- it
+resolved correctly sometimes and to a city hundreds of miles off other
+times, on the same network. Facebook's location picker requires a login
+to use, so this uses a persisted login session (see facebook_login.py,
+run once interactively) which gets a stable, correct location tied to
+the account instead of a flaky per-request IP guess. Falls back to
+anonymous access if no session file exists.
+
+That session file (data/fb_session.json, gitignored) is effectively a
+login credential for that Facebook account, stored in plaintext on disk.
+See facebook_login.py's docstring for the full risk note.
 
 Listings are read out of a `<script type="application/json">` blob
 Facebook embeds in the page for its own client-side hydration (a Relay/
@@ -24,7 +26,10 @@ resilient to Facebook's frequent frontend/CSS churn.
 """
 import json
 import re
+from pathlib import Path
 from urllib.parse import urlencode
+
+DEFAULT_SESSION_PATH = Path(__file__).resolve().parent.parent / "data" / "fb_session.json"
 
 CATEGORY_URL = "https://www.facebook.com/marketplace/category/bicycles"
 USER_AGENT = (
@@ -70,19 +75,23 @@ class FacebookSession:
     than reusing a context across every keyword search and detail fetch.
     """
 
-    def __init__(self, playwright, timeout=30):
+    def __init__(self, playwright, session_path=DEFAULT_SESSION_PATH, timeout=30):
         # Takes an already-started Playwright driver rather than starting
         # its own: the sync API only supports one active driver per
         # thread, and OfferUpSession/FacebookSession may both be in use
         # in the same run.
         self._playwright = playwright
+        self.session_path = Path(session_path) if session_path else None
         self.timeout_ms = timeout * 1000
         self._browser = None
         self._context = None
 
     def __enter__(self):
         self._browser = self._playwright.chromium.launch(headless=True)
-        self._context = self._browser.new_context(locale="en-US", user_agent=USER_AGENT)
+        context_kwargs = {"locale": "en-US", "user_agent": USER_AGENT}
+        if self.session_path and self.session_path.exists():
+            context_kwargs["storage_state"] = str(self.session_path)
+        self._context = self._browser.new_context(**context_kwargs)
         return self
 
     def __exit__(self, *exc_info):

@@ -190,6 +190,19 @@ def main():
     write_env()
     venv_python = setup_venv(enabled_sources)
 
+    if "facebook" in enabled_sources and venv_python:
+        print(
+            "\nFacebook Marketplace needs a one-time login (its location picker\n"
+            "requires it -- anonymous access resolves an unreliable IP-based\n"
+            "location). This opens a real, visible browser for you to log into\n"
+            "Facebook yourself; the session gets saved to data/fb_session.json\n"
+            "(gitignored, local only). That file is effectively a login credential\n"
+            "for that account, stored in plaintext on this machine -- consider a\n"
+            "secondary account rather than your primary one if that's a concern."
+        )
+        if ask_yes_no("Log into Facebook now?", default=True):
+            subprocess.run([str(venv_python), str(ROOT / "facebook_login.py")], check=True)
+
     if venv_python and ask_yes_no("\nRun a test search right now?", default=True):
         subprocess.run([str(venv_python), str(ROOT / "main.py")])
 
